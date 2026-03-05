@@ -184,7 +184,7 @@ export default function PeacePage() {
 
         {/* 实时新闻轮播 */}
         <section className="mt-10">
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">最近 24 小时实时新闻</h2>
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">最近 48 小时实时新闻</h2>
           <div className="relative w-full max-w-5xl mx-auto bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl h-[450px] md:h-[400px] flex items-center justify-center">
             {newsItems.map((news, index) => (
               <div 
