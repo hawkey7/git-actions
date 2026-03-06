@@ -19,8 +19,8 @@ interface NewsItem {
 
 // NewsAPI 配置 - 聚焦美伊/中东冲突
 // 请替换为你自己的 API Key: https://newsapi.org/register
-const NEWS_API_KEY = 'cdd55265f64b4d829f6155b42a5db3bb';
-const NEWS_API_URL = `https://newsapi.org/v2/everything?q=Iran+Israel+war+OR+US+Iran+conflict&language=en&sortBy=publishedAt&apiKey=${NEWS_API_KEY}&pageSize=6`;
+const NEWS_API_KEY = process.env.NEXT_PUBLIC_NEWS_API_KEY || 'cdd55265f64b4d829f6155b42a5db3bb';
+const NEWS_API_URL = (apiKey: string) => `https://newsapi.org/v2/everything?q=Iran+Israel+war+OR+US+Iran+conflict&language=en&sortBy=publishedAt&apiKey=${apiKey}&pageSize=6`;
 
 // 备用图片
 const PLACEHOLDER_IMAGES = [
@@ -34,8 +34,11 @@ const PLACEHOLDER_IMAGES = [
 
 // 从 NewsAPI 获取新闻
 async function fetchFromNewsAPI(): Promise<NewsItem[]> {
+  const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY || 'cdd55265f64b4d829f6155b42a5db3bb';
+  const url = `https://newsapi.org/v2/everything?q=Iran+Israel+war+OR+US+Iran+conflict&language=en&sortBy=publishedAt&apiKey=${apiKey}&pageSize=6`;
+  
   try {
-    const response = await fetch(NEWS_API_URL);
+    const response = await fetch(url);
     const data = await response.json();
     
     if (data.status === 'ok' && data.articles && data.articles.length > 0) {
@@ -87,11 +90,6 @@ export default function PeacePage() {
   useEffect(() => {
     const fetchRealTimeNews = async () => {
       try {
-        // 检查是否已配置 API Key
-        if (NEWS_API_KEY === 'YOUR_NEWSAPI_KEY_HERE') {
-          throw new Error('请配置 NewsAPI Key');
-        }
-        
         const items = await fetchFromNewsAPI();
         
         if (items.length > 0) {
