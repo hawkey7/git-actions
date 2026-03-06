@@ -1,6 +1,6 @@
 /**
  * @file page.tsx
- * @description 呼吁和平、停止对伊朗侵略的页面。包含从 Google News RSS 获取实时新闻的轮播功能。
+ * @description 呼吁和平、停止对伊朗侵略的页面。包含从 NewsAPI 获取实时新闻的轮播功能。
  */
 
 'use client';
@@ -14,6 +14,60 @@ interface NewsItem {
   description: string;
   link: string;
   imageUrl: string;
+  source: string;
+}
+
+// NewsAPI 配置 - 聚焦美伊/中东冲突
+// 请替换为你自己的 API Key: https://newsapi.org/register
+const NEWS_API_KEY = 'cdd55265f64b4d829f6155b42a5db3bb';
+const NEWS_API_URL = `https://newsapi.org/v2/everything?q=Iran+Israel+war+OR+US+Iran+conflict&language=en&sortBy=publishedAt&apiKey=${NEWS_API_KEY}&pageSize=6`;
+
+// 备用图片
+const PLACEHOLDER_IMAGES = [
+  "https://images.unsplash.com/photo-1541888046425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=2070&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1495020689067-958852a7765e?q=80&w=2069&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?q=80&w=2070&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1584483766114-2cea6facdf57?q=80&w=2070&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1503694978374-8a2fa686963a?q=80&w=2069&auto=format&fit=crop"
+];
+
+// 从 NewsAPI 获取新闻
+async function fetchFromNewsAPI(): Promise<NewsItem[]> {
+  try {
+    const response = await fetch(NEWS_API_URL);
+    const data = await response.json();
+    
+    if (data.status === 'ok' && data.articles && data.articles.length > 0) {
+      return data.articles.slice(0, 6).map((article: any, index: number) => {
+        // 计算时间
+        const pubDate = new Date(article.publishedAt);
+        const now = new Date();
+        const diffMs = now.getTime() - pubDate.getTime();
+        const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        
+        let timeLabel = "刚刚";
+        if (diffHours < 24) {
+          timeLabel = diffHours < 1 ? "刚刚" : `${diffHours} 小时前`;
+        } else {
+          timeLabel = `${diffDays} 天前`;
+        }
+
+        return {
+          time: timeLabel,
+          title: article.title || "无标题",
+          description: article.description?.substring(0, 150) + "..." || "点击标题阅读详细新闻内容以了解最新局势发展。",
+          link: article.url || "#",
+          imageUrl: article.urlToImage || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length],
+          source: article.source?.name || "News"
+        };
+      });
+    }
+  } catch (error) {
+    console.error('NewsAPI fetch error:', error);
+  }
+  return [];
 }
 
 export default function PeacePage() {
@@ -24,65 +78,26 @@ export default function PeacePage() {
       title: "正在获取最新实时新闻，请稍候...",
       description: "新闻数据加载中...",
       link: "#",
-      imageUrl: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop"
+      imageUrl: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop",
+      source: ""
     }
   ]);
 
-  // 客户端获取实时新闻（通过 rss2json 代理 Google News RSS）
+  // 获取实时新闻 - 使用 NewsAPI
   useEffect(() => {
     const fetchRealTimeNews = async () => {
       try {
-        // 使用 Google News 关于“伊朗 美国 以色列”的中文 RSS 源
-        const rssUrl = encodeURIComponent('https://news.google.com/rss/search?q=伊朗+美国+以色列&hl=zh-CN&gl=CN&ceid=CN:zh-Hans');
-        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}`);
-        const data = await response.json();
+        // 检查是否已配置 API Key
+        if (NEWS_API_KEY === 'YOUR_NEWSAPI_KEY_HERE') {
+          throw new Error('请配置 NewsAPI Key');
+        }
         
-        if (data.status === 'ok' && data.items && data.items.length > 0) {
-          // 按照新闻发生时间倒序排序
-          const sortedItems = data.items.sort((a: any, b: any) => {
-            return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
-          });
-
-          const items = sortedItems.slice(0, 6).map((item: any, index: number) => {
-            // 计算距离现在的时间
-            const pubDate = new Date(item.pubDate);
-            const now = new Date();
-            const diffHours = Math.round((now.getTime() - pubDate.getTime()) / (1000 * 60 * 60));
-            const timeLabel = diffHours === 0 ? "刚刚" : `${diffHours} 小时前`;
-
-            // 提取或生成简单的描述 (RSS返回的description往往包含复杂HTML，我们做一个简单剥离)
-            let desc = item.description || "";
-            // 去除HTML标签
-            desc = desc.replace(/<[^>]+>/g, '');
-            // 截断描述以保证排版
-            if (desc.length > 150) {
-              desc = desc.substring(0, 150) + '...';
-            }
-
-            // 尝试从新闻内容或返回字段中获取图片，如果找不到则使用默认相关图片
-            let image = item.thumbnail || item.enclosure?.link;
-            if (!image) {
-              // 6张专门准备的国际局势/新闻占位图，根据索引按顺序分配，保证6条新闻图片不重复
-              const placeholders = [
-                "https://images.unsplash.com/photo-1541888046425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop", // 建筑/新闻/国际
-                "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=2070&auto=format&fit=crop", // 经济/全球/影响
-                "https://images.unsplash.com/photo-1495020689067-958852a7765e?q=80&w=2069&auto=format&fit=crop", // 报纸/媒体
-                "https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?q=80&w=2070&auto=format&fit=crop", // 团队/发布会
-                "https://images.unsplash.com/photo-1584483766114-2cea6facdf57?q=80&w=2070&auto=format&fit=crop", // 会议/庄重
-                "https://images.unsplash.com/photo-1503694978374-8a2fa686963a?q=80&w=2069&auto=format&fit=crop"  // 印刷品/重大新闻
-              ];
-              image = placeholders[index % placeholders.length];
-            }
-
-            return {
-              time: timeLabel,
-              title: item.title.replace(/ - [^-]+$/, ''), // 移除新闻来源后缀
-              description: desc || "点击标题阅读详细新闻内容以了解最新局势发展。",
-              link: item.link,
-              imageUrl: image
-            };
-          });
+        const items = await fetchFromNewsAPI();
+        
+        if (items.length > 0) {
           setNewsItems(items);
+        } else {
+          throw new Error('No news fetched');
         }
       } catch (error) {
         console.error('获取新闻失败:', error);
@@ -92,7 +107,8 @@ export default function PeacePage() {
             title: "无法获取最新新闻，请检查网络连接。",
             description: "请稍后刷新页面重试。",
             link: "#",
-            imageUrl: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop"
+            imageUrl: "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop",
+            source: ""
           }
         ]);
       }
@@ -116,9 +132,9 @@ export default function PeacePage() {
       {/* 头部 / 英雄区 */}
       <header className="relative w-full h-[60vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <Image 
-            src="https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop" 
-            alt="和平鸽" 
+          <Image
+            src="https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?q=80&w=2070&auto=format&fit=crop"
+            alt="和平鸽"
             fill
             className="object-cover opacity-30"
             unoptimized
@@ -126,7 +142,7 @@ export default function PeacePage() {
           />
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-neutral-950"></div>
         </div>
-        
+
         <div className="relative z-10 text-center px-6 max-w-4xl mx-auto mt-20">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-white">
             坚守和平 <br className="hidden md:block"/> 停止侵略
@@ -138,7 +154,7 @@ export default function PeacePage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-16 grid gap-16">
-        
+
         {/* 核心诉求区 */}
         <section className="grid md:grid-cols-2 gap-10">
           <div className="bg-neutral-900 p-8 rounded-2xl border border-neutral-800 shadow-xl transition-transform hover:-translate-y-1">
@@ -187,18 +203,18 @@ export default function PeacePage() {
           <h2 className="text-3xl font-bold text-white mb-8 text-center">最近 48 小时实时新闻</h2>
           <div className="relative w-full max-w-5xl mx-auto bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden shadow-2xl h-[450px] md:h-[400px] flex items-center justify-center">
             {newsItems.map((news, index) => (
-              <div 
+              <div
                 key={index}
                 className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out flex flex-col md:flex-row ${
-                  index === currentNewsIndex 
-                    ? 'opacity-100 z-10' 
+                  index === currentNewsIndex
+                    ? 'opacity-100 z-10'
                     : 'opacity-0 z-0 pointer-events-none'
                 }`}
               >
                 {/* 新闻图片区域 */}
                 <div className="w-full md:w-1/2 h-48 md:h-full relative overflow-hidden">
-                  <Image 
-                    src={news.imageUrl} 
+                  <Image
+                    src={news.imageUrl}
                     alt={news.title}
                     fill
                     className="object-cover transition-transform duration-[10000ms] ease-linear hover:scale-110"
@@ -209,29 +225,34 @@ export default function PeacePage() {
 
                 {/* 新闻内容区域 */}
                 <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-neutral-900">
-                  <div className="mb-4 flex items-center">
+                  <div className="mb-4 flex items-center gap-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-4 py-1.5 rounded-full inline-block">
                       {news.time}
                     </span>
+                    {news.source && (
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-full inline-block">
+                        {news.source}
+                      </span>
+                    )}
                   </div>
-                  
+
                   <a href={news.link} target="_blank" rel="noopener noreferrer" className="group">
                     <h3 className="text-xl md:text-3xl font-bold text-white leading-tight mb-4 group-hover:text-amber-400 transition-colors line-clamp-3">
                       {news.title}
                     </h3>
                   </a>
-                  
+
                   <p className="text-neutral-400 leading-relaxed line-clamp-4 md:line-clamp-5 mb-6 text-sm md:text-base">
                     {news.description}
                   </p>
 
-                  <a 
-                    href={news.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
+                  <a
+                    href={news.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm font-medium text-white hover:text-amber-400 transition-colors w-max"
                   >
-                    阅读全文 
+                    阅读全文
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                   </a>
                 </div>
